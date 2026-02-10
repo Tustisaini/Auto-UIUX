@@ -48,6 +48,10 @@ function Hero() {
 
     console.log(result.data);
     setloading(false);
+
+    //Navigate to project Route
+
+    router.push('/project/'+projectId);
   };
 
   return (
