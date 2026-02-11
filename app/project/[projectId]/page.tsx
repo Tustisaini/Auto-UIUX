@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import ProjectHeader from "./_shared/ProjectHeader";
 import SettingsSection from "./_shared/SettingsSection";
 import { useParams } from "next/navigation";
@@ -12,10 +12,37 @@ function ProjectCanvasPlayground() {
   const params = useParams();
   const projectId = params?.projectId as string;
 
-  const [projectDetail, setProjectDetail] = useState<ProjectType | undefined>();
+  const [projectDetail, setProjectDetail] = useState<ProjectType>();
   const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Loading project");
+
+  // Prevent duplicate generation calls
+  const hasGeneratedRef = useRef(false);
+
+  /* -------------------- Load Project -------------------- */
+
+  useEffect(() => {
+    if (projectId) {
+      getProjectDetail();
+    }
+  }, [projectId]);
+
+  /* -------------------- Auto Generate UI -------------------- */
+
+  useEffect(() => {
+    if (
+      projectDetail &&
+      screenConfig.length > 0 &&
+      screenConfig.some((screen) => !screen.code) &&
+      !hasGeneratedRef.current
+    ) {
+      hasGeneratedRef.current = true;
+      generateScreenUIUX();
+    }
+  }, [projectDetail, screenConfig]);
+
+  /* -------------------- Generate Screen Config -------------------- */
 
   const generateScreenConfig = async (
     deviceType?: string,
@@ -31,8 +58,6 @@ function ProjectCanvasPlayground() {
         userInput,
       });
 
-      console.log("🧠 AI RESPONSE:", result.data?.JSONAiResult);
-
       setScreenConfig(result.data?.JSONAiResult?.screens ?? []);
     } catch (error) {
       console.error("Error generating screen config:", error);
@@ -41,7 +66,9 @@ function ProjectCanvasPlayground() {
     }
   };
 
-  const GetProjectDetail = async () => {
+  /* -------------------- Get Project Detail -------------------- */
+
+  const getProjectDetail = async () => {
     try {
       setLoading(true);
       setLoadingMsg("Loading project");
@@ -66,11 +93,44 @@ function ProjectCanvasPlayground() {
     }
   };
 
-  useEffect(() => {
-    if (projectId) {
-      GetProjectDetail();
+  /* -------------------- Generate Screen UI -------------------- */
+
+  const generateScreenUIUX = async () => {
+    try {
+      setLoading(true);
+
+      for (let index = 0; index < screenConfig.length; index++) {
+        const screen = screenConfig[index];
+
+        if (screen?.code) continue;
+
+        setLoadingMsg(`Generating Screen ${index + 1} of ${screenConfig.length}`);
+
+        const result = await axios.post("/api/generate-screen-ui", {
+          projectId,
+          screenId: screen?.screenId,
+          screenName: screen?.screenName,
+          purpose: screen?.purpose,
+          screenDescription: screen?.screenDescription,
+        });
+
+        const generatedCode = result.data?.code;
+
+        // Update only the specific screen
+        setScreenConfig((prev) =>
+          prev.map((item, i) =>
+            i === index ? { ...item, code: generatedCode } : item
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error generating screen UI:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [projectId]);
+  };
+
+  /* -------------------- UI -------------------- */
 
   return (
     <div>
@@ -89,7 +149,9 @@ function ProjectCanvasPlayground() {
 
       <div className="flex">
         <SettingsSection projectDetail={projectDetail} />
-        <div className="flex-1">{/* canvas */}</div>
+        <div className="flex-1">
+          {/* Canvas Preview Area */}
+        </div>
       </div>
     </div>
   );
