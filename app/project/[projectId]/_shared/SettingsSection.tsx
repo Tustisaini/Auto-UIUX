@@ -4,33 +4,66 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { THEME_NAME_LIST, THEMES } from "@/data/Themes";
+import { ProjectType } from "@/type/type";
 import { Camera, Share } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const BRAND_COLOR = "oklch(0.696 0.1759 28.14)";
 
-function SettingsSection() {
+type Props = {
+  projectDetail: ProjectType | undefined;
+};
+
+function SettingsSection({ projectDetail }: Props) {
+  // ✅ SAFE DEFAULTS
   const [selectedTheme, setSelectedTheme] = useState("AUROR_INK");
-  const [projectName, setProjectName] = useState("");
-  const [userNewScreenInput, setUserNewScreenInput] = useState<string>();
+ const [projectName, setProjectName] = useState("");
+  const [userNewScreenInput, setUserNewScreenInput] = useState<string>("");
+
+  // 🔒 Prevent overwriting user-selected theme
+  const [isThemeTouched, setIsThemeTouched] = useState(false);
+useEffect(() => {
+  setProjectName(projectDetail?.projectName ?? "");
+}, [projectDetail]);
+  // ✅ Sync project detail (ONE-WAY, SAFE)
+  useEffect(() => {
+    if (!projectDetail) return;
+
+    if (projectDetail.projectName) {
+      setProjectName(projectDetail.projectName);
+    }
+
+    // ✅ Only set theme from DB if user hasn't clicked yet
+    if (!isThemeTouched && projectDetail.theme) {
+      setSelectedTheme(projectDetail.theme);
+    }
+  }, [projectDetail, isThemeTouched]);
 
   return (
     <div className="w-75 min-h-screen p-5 border-r">
       <h2 className="font-bold text-lg">Settings</h2>
 
+      {/* Project Name */}
       <div className="mt-3">
         <h2 className="text-sm mb-1 font-semibold">Project Name</h2>
         <Input
           placeholder="Project Name"
+          value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
         />
       </div>
 
+      {/* Generate New Screen */}
       <div className="mt-5">
-        <h2 className="text-sm mb-1 font-semibold">Generate New Screen</h2>
+        <h2 className="text-sm mb-1 font-semibold">
+          Generate New Screen
+        </h2>
         <Textarea
           placeholder="Enter Prompt to generate screen using AI"
-          onChange={(event) => setUserNewScreenInput(event.target.value)}
+          value={userNewScreenInput}
+          onChange={(event) =>
+            setUserNewScreenInput(event.target.value)
+          }
         />
         <Button
           size="sm"
@@ -41,6 +74,7 @@ function SettingsSection() {
         </Button>
       </div>
 
+      {/* Themes */}
       <div className="mt-5">
         <h2 className="text-sm mb-1 font-semibold">Themes</h2>
 
@@ -51,7 +85,10 @@ function SettingsSection() {
             return (
               <div
                 key={theme}
-                onClick={() => setSelectedTheme(theme)}
+                onClick={() => {
+                  setIsThemeTouched(true);
+                  setSelectedTheme(theme);
+                }}
                 className="space-y-1 p-3 border rounded-xl mb-2 cursor-pointer transition"
                 style={{
                   borderColor: isSelected ? BRAND_COLOR : undefined,
@@ -80,17 +117,16 @@ function SettingsSection() {
                     style={{ background: THEMES[theme].background }}
                   />
                   <div
-  className="h-4 w-4 rounded-full"
-  style={{
-    background: `linear-gradient(
-      135deg,
-      ${THEMES[theme].background},
-      ${THEMES[theme].primary},
-      ${THEMES[theme].accent}
-    )`,
-  }}
-/>
-
+                    className="h-4 w-4 rounded-full"
+                    style={{
+                      background: `linear-gradient(
+                        135deg,
+                        ${THEMES[theme].background},
+                        ${THEMES[theme].primary},
+                        ${THEMES[theme].accent}
+                      )`,
+                    }}
+                  />
                 </div>
               </div>
             );
@@ -98,6 +134,7 @@ function SettingsSection() {
         </div>
       </div>
 
+      {/* Extras */}
       <div className="mt-5">
         <h2 className="text-sm mb-1 font-semibold">Extras</h2>
         <div className="flex gap-3">

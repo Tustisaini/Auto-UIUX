@@ -1,5 +1,123 @@
 
 export const THEMES = {
+
+    NETFLIX_NIGHT: {
+    background: "#0b0b0b",
+    foreground: "#ffffff",
+
+    card: "#141414",
+    cardForeground: "#ffffff",
+
+    popover: "#141414",
+    popoverForeground: "#ffffff",
+
+    primary: "#e50914",
+    primaryRgb: "229, 9, 20",
+    primaryForeground: "#ffffff",
+
+    secondary: "#1f1f1f",
+    secondaryForeground: "#ffffff",
+
+    muted: "#1a1a1a",
+    mutedForeground: "#9ca3af",
+
+    accent: "#b20710",
+    accentForeground: "#ffffff",
+
+    destructive: "#ff3b3b",
+
+    border: "#262626",
+    input: "#262626",
+    ring: "#e50914",
+    radius: "0.65rem",
+
+    chart: [
+        "#e50914",
+        "#ffffff",
+        "#9ca3af",
+        "#ff6b6b",
+        "#6b7280",
+    ],
+},
+
+SHOPIFY_FRESH: {
+    background: "#f6f6f7",
+    foreground: "#202223",
+
+    card: "#ffffff",
+    cardForeground: "#202223",
+
+    popover: "#ffffff",
+    popoverForeground: "#202223",
+
+    primary: "#008060",
+    primaryRgb: "0, 128, 96",
+    primaryForeground: "#ffffff",
+
+    secondary: "#eaf5f1",
+    secondaryForeground: "#202223",
+
+    muted: "#eef1f4",
+    mutedForeground: "#5c5f62",
+
+    accent: "#5fd1b8",
+    accentForeground: "#0f172a",
+
+    destructive: "#d72c0d",
+
+    border: "#dfe3e8",
+    input: "#ffffff",
+    ring: "#008060",
+    radius: "0.8rem",
+
+    chart: [
+        "#008060",
+        "#5fd1b8",
+        "#f49342",
+        "#2c6ecb",
+        "#d72c0d",
+    ],
+},
+
+GITHUB_DARK: {
+    background: "#0d1117",
+    foreground: "#e6edf3",
+
+    card: "#161b22",
+    cardForeground: "#e6edf3",
+
+    popover: "#161b22",
+    popoverForeground: "#e6edf3",
+
+    primary: "#2f81f7",
+    primaryRgb: "47, 129, 247",
+    primaryForeground: "#0d1117",
+
+    secondary: "#21262d",
+    secondaryForeground: "#e6edf3",
+
+    muted: "#161b22",
+    mutedForeground: "#8b949e",
+
+    accent: "#3fb950",
+    accentForeground: "#0d1117",
+
+    destructive: "#f85149",
+
+    border: "#30363d",
+    input: "#30363d",
+    ring: "#2f81f7",
+    radius: "0.6rem",
+
+    chart: [
+        "#2f81f7",
+        "#3fb950",
+        "#f0883e",
+        "#f85149",
+        "#a371f7",
+    ],
+},
+
     AURORA_INK: {
         background: "#0b1020",
         foreground: "#f4f6ff",
@@ -237,6 +355,9 @@ export const THEMES = {
 
 
 export const THEME_NAME_LIST = [
+    "NETFLIX_NIGHT",
+    "SHOPIFY_FRESH",
+    "GITHUB_DARK",
     "AURORA_INK",
     "DUSTY_ORCHID",
     "CITRUS_SLATE",
