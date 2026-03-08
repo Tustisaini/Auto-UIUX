@@ -171,7 +171,7 @@ cards, nav bars, action buttons
 LAYOUT RULES (WEB + MOBILE)
 ────────────────────────────────────────
 Root container:
-class="relative w-full min-h-screen bg-[var(--background)]"
+class="relative w-full min-h-screen bg-background"
 NEVER apply overflow to root
 Inner scrollable container:
 overflow-y-auto
