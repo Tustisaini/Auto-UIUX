@@ -6,9 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 
-/* ================================
+/* 
    CREATE PROJECT
-================================ */
+ */
 export async function POST(req: NextRequest) {
   try {
     const { userInput, device, projectId } = await req.json();
@@ -112,4 +112,16 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function PUT(req:NextRequest){
+  const{projectName,theme,projectId}=await req.json();
+
+  const result=await db.update(ProjectTable).set({
+    projectName:projectName,
+    theme:theme,
+    projectId
+  }).where(eq(ProjectTable.projectId,projectId)).returning();
+
+  return NextResponse.json(result[0])
 }

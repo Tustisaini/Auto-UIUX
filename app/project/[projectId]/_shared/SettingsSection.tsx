@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { THEME_NAME_LIST, THEMES } from "@/data/Themes";
 import { ProjectType } from "@/type/type";
 import { Camera, Share } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { SettingContext } from "@/context/SettingContext";
 
 const BRAND_COLOR = "oklch(0.696 0.1759 28.14)";
 
@@ -15,29 +16,43 @@ type Props = {
 };
 
 function SettingsSection({ projectDetail }: Props) {
-  // ✅ SAFE DEFAULTS
   const [selectedTheme, setSelectedTheme] = useState("AUROR_INK");
- const [projectName, setProjectName] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [userNewScreenInput, setUserNewScreenInput] = useState<string>("");
 
-  // 🔒 Prevent overwriting user-selected theme
+  // ✅ CORRECT NAME
+  const { settingsDetail, setSettingDetail }: any =
+    useContext(SettingContext);
+
   const [isThemeTouched, setIsThemeTouched] = useState(false);
-useEffect(() => {
-  setProjectName(projectDetail?.projectName ?? "");
-}, [projectDetail]);
-  // ✅ Sync project detail (ONE-WAY, SAFE)
+
   useEffect(() => {
     if (!projectDetail) return;
 
-    if (projectDetail.projectName) {
-      setProjectName(projectDetail.projectName);
+    setProjectName(projectDetail.projectName ?? "");
+
+    if (!isThemeTouched) {
+      setSelectedTheme(projectDetail.theme ?? "AUROR_INK");
     }
 
-    // ✅ Only set theme from DB if user hasn't clicked yet
-    if (!isThemeTouched && projectDetail.theme) {
-      setSelectedTheme(projectDetail.theme);
+    // ✅ FIXED (functional update)
+    if (!settingsDetail?.theme) {
+      setSettingDetail((prev: any) => ({
+        ...prev,
+        theme: projectDetail.theme ?? "AUROR_INK",
+      }));
     }
   }, [projectDetail, isThemeTouched]);
+
+  const onThemeSelect = (theme: string) => {
+    setSelectedTheme(theme);
+
+    // ✅ FIXED
+    setSettingDetail((prev: any) => ({
+      ...prev,
+      theme: theme,
+    }));
+  };
 
   return (
     <div className="w-75 min-h-screen p-5 border-r">
@@ -49,21 +64,26 @@ useEffect(() => {
         <Input
           placeholder="Project Name"
           value={projectName}
-          onChange={(event) => setProjectName(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            setProjectName(value);
+
+            // ✅ FIXED
+            setSettingDetail((prev: any) => ({
+              ...prev,
+              projectName: value,
+            }));
+          }}
         />
       </div>
 
       {/* Generate New Screen */}
       <div className="mt-5">
-        <h2 className="text-sm mb-1 font-semibold">
-          Generate New Screen
-        </h2>
+        <h2 className="text-sm mb-1 font-semibold">Generate New Screen</h2>
         <Textarea
           placeholder="Enter Prompt to generate screen using AI"
           value={userNewScreenInput}
-          onChange={(event) =>
-            setUserNewScreenInput(event.target.value)
-          }
+          onChange={(event) => setUserNewScreenInput(event.target.value)}
         />
         <Button
           size="sm"
@@ -77,7 +97,6 @@ useEffect(() => {
       {/* Themes */}
       <div className="mt-5">
         <h2 className="text-sm mb-1 font-semibold">Themes</h2>
-
         <div className="h-[200px] overflow-auto space-y-3">
           {THEME_NAME_LIST.map((theme) => {
             const isSelected = theme === selectedTheme;
@@ -87,7 +106,7 @@ useEffect(() => {
                 key={theme}
                 onClick={() => {
                   setIsThemeTouched(true);
-                  setSelectedTheme(theme);
+                  onThemeSelect(theme);
                 }}
                 className="space-y-1 p-3 border rounded-xl mb-2 cursor-pointer transition"
                 style={{

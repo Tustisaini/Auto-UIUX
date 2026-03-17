@@ -8,7 +8,7 @@ import { useUser, UserButton, SignInButton } from '@clerk/nextjs';
 function Header() {
   const { user, isLoaded } = useUser();
 
-  if (!isLoaded) return null; // prevents hydration issues
+  if (!isLoaded) return null;
 
   return (
     <header className="flex items-center justify-between p-4 bg-white shadow-md">
