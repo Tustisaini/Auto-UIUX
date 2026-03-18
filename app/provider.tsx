@@ -4,10 +4,13 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { UserDetailContext } from "@/context/UserDetailContext";
 import { SettingContext } from "@/context/SettingContext";
+import { RefreshCcwDot } from "lucide-react";
+import { RefreshDataContext } from "@/context/RefreshDataContext";
 
 function Provider({ children }: any) {
   const [userDetail, setUserDetail] = useState<any>(null);
   const [settingsDetail, setSettingDetail] = useState<any>({});
+const [refreshData,setRefreshData]=useState();
 
   useEffect(() => {
     CreateNewUser();
@@ -26,7 +29,10 @@ function Provider({ children }: any) {
   return (
     <UserDetailContext.Provider value={{ userDetail, setUserDetail }}>
       <SettingContext.Provider value={{ settingsDetail, setSettingDetail }}>
-        {children}
+        <RefreshDataContext.Provider value={{refreshData,setRefreshData}}>
+          {children}
+        </RefreshDataContext.Provider>
+        
       </SettingContext.Provider>
     </UserDetailContext.Provider>
   );

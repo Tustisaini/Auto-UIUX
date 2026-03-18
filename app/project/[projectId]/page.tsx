@@ -9,6 +9,7 @@ import { ProjectType, ScreenConfig } from "@/type/type";
 import { Loader2Icon } from "lucide-react";
 import Canvas from "./_shared/Canvas";
 import { SettingContext } from "@/context/SettingContext";
+import { RefreshDataContext } from "@/context/RefreshDataContext";
 
 function ProjectCanvasPlayground() {
   const params = useParams();
@@ -17,11 +18,11 @@ function ProjectCanvasPlayground() {
   const [projectDetail, setProjectDetail] = useState<ProjectType>();
   const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
   const [screenConfigOriginal, setScreenConfigOriginal] = useState<ScreenConfig[]>([]);
-const { settingsDetail, setSettingDetail } = useContext(SettingContext);
+  const { settingsDetail, setSettingDetail } = useContext(SettingContext);
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Loading project");
-
+ const{refreshData,setRefreshData}=useContext(RefreshDataContext);
   const hasGeneratedRef = useRef(false);
 
   /* -------------------- Load Project -------------------- */
@@ -31,6 +32,11 @@ const { settingsDetail, setSettingDetail } = useContext(SettingContext);
     }
   }, [projectId]);
 
+  useEffect(()=>{
+    if(refreshData?.method=='screenConfig'){
+      getProjectDetail();
+    }
+  },[refreshData])
   /* -------------------- Auto Generate UI -------------------- */
   useEffect(() => {
     if (
@@ -50,13 +56,13 @@ const { settingsDetail, setSettingDetail } = useContext(SettingContext);
       setLoading(true);
       setLoadingMsg("Generating screen config");
 
-      const result = await axios.post("/api/generate-config", {
+      const result = await axios.post("/api/generateScreenConfig", {
         projectId,
-        deviceType,
+        device: deviceType,
         userInput,
       });
 
-      const screens = result.data?.JSONAiResult?.screens ?? [];
+      const screens = result.data?.data?.screens ?? [];
 
       setScreenConfig(screens);
       setScreenConfigOriginal(screens);
@@ -82,7 +88,7 @@ const { settingsDetail, setSettingDetail } = useContext(SettingContext);
       setScreenConfigOriginal(config);
       setScreenConfig(config);
 
-      setSettingDetail(detail); // ✅ fixed
+      setSettingDetail(detail); // unchanged
 
       if (config.length === 0) {
         await generateScreenConfig(detail?.device, detail?.userInput);
@@ -108,21 +114,35 @@ const { settingsDetail, setSettingDetail } = useContext(SettingContext);
           `Generating Screen ${index + 1} of ${screenConfigOriginal.length}`
         );
 
-        const result = await axios.post("/api/generate-screen-ui", {
-          projectId,
-          screenId: screen?.screenId,
-          screenName: screen?.screenName,
-          purpose: screen?.purpose,
-          screenDescription: screen?.screenDescription,
-        });
+        // Use safe defaults
+        const screenId = screen?.id || screen?.screenId;
+        const screenName = screen?.screenName || `Screen ${index + 1}`;
+        const purpose = screen?.purpose || "No purpose provided";
 
-        const generatedCode = result.data?.code;
+        if (!projectId || !screenId) {
+          console.error("❌ Missing essential IDs:", { projectId, screenId });
+          continue;
+        }
 
-        setScreenConfig((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, code: generatedCode } : item
-          )
-        );
+        try {
+          const result = await axios.post("/api/generate-screen-ui", {
+            projectId,
+            screenId,
+            screenName,
+            purpose,
+            screenDescription: screen?.screenDescription || "",
+          });
+
+          const generatedCode = result.data?.code;
+
+          setScreenConfig((prev) =>
+            prev.map((item, i) =>
+              i === index ? { ...item, code: generatedCode } : item
+            )
+          );
+        } catch (error) {
+          console.error(`Error generating screen ${screenId}:`, error);
+        }
       }
     } catch (error) {
       console.error("Error generating screen UI:", error);

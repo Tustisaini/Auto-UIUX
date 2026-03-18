@@ -12,6 +12,7 @@ export type ScreenConfig={
     id:number,
     screenId:string,
     screenName:string,
+      name?: string,         
     purpose:string,
     screenDescription:string,
     code?: string
