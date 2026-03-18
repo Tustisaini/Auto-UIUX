@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useContext } from "react";
 import ProjectHeader from "./_shared/ProjectHeader";
 import SettingsSection from "./_shared/SettingsSection";
 import { useParams } from "next/navigation";
@@ -8,19 +8,21 @@ import axios from "axios";
 import { ProjectType, ScreenConfig } from "@/type/type";
 import { Loader2Icon } from "lucide-react";
 import Canvas from "./_shared/Canvas";
+import { SettingContext } from "@/context/SettingContext";
+import { RefreshDataContext } from "@/context/RefreshDataContext";
 
 function ProjectCanvasPlayground() {
   const params = useParams();
   const projectId = params?.projectId as string;
 
   const [projectDetail, setProjectDetail] = useState<ProjectType>();
-  
   const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
   const [screenConfigOriginal, setScreenConfigOriginal] = useState<ScreenConfig[]>([]);
+  const { settingsDetail, setSettingDetail } = useContext(SettingContext);
+
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Loading project");
-
-  // Prevent duplicate generation calls
+ const{refreshData,setRefreshData}=useContext(RefreshDataContext);
   const hasGeneratedRef = useRef(false);
 
   /* -------------------- Load Project -------------------- */
@@ -30,6 +32,11 @@ function ProjectCanvasPlayground() {
     }
   }, [projectId]);
 
+  useEffect(()=>{
+    if(refreshData?.method=='screenConfig'){
+      getProjectDetail();
+    }
+  },[refreshData])
   /* -------------------- Auto Generate UI -------------------- */
   useEffect(() => {
     if (
@@ -49,15 +56,16 @@ function ProjectCanvasPlayground() {
       setLoading(true);
       setLoadingMsg("Generating screen config");
 
-      const result = await axios.post("/api/generate-config", {
+      const result = await axios.post("/api/generateScreenConfig", {
         projectId,
-        deviceType,
+        device: deviceType,
         userInput,
       });
 
-      const screens = result.data?.JSONAiResult?.screens ?? [];
+      const screens = result.data?.data?.screens ?? [];
+
       setScreenConfig(screens);
-      setScreenConfigOriginal(screens); // keep original copy
+      setScreenConfigOriginal(screens);
     } catch (error) {
       console.error("Error generating screen config:", error);
     } finally {
@@ -77,8 +85,10 @@ function ProjectCanvasPlayground() {
       const config = result?.data?.screenConfig ?? [];
 
       setProjectDetail(detail);
-      setScreenConfigOriginal(config);  // fixed
+      setScreenConfigOriginal(config);
       setScreenConfig(config);
+
+      setSettingDetail(detail); // unchanged
 
       if (config.length === 0) {
         await generateScreenConfig(detail?.device, detail?.userInput);
@@ -95,29 +105,44 @@ function ProjectCanvasPlayground() {
     try {
       setLoading(true);
 
-      for (let index = 0; index < screenConfig.length; index++) {
-        const screen = screenConfig[index];
+      for (let index = 0; index < screenConfigOriginal.length; index++) {
+        const screen = screenConfigOriginal[index];
 
         if (screen?.code) continue;
 
-        setLoadingMsg(`Generating Screen ${index + 1} of ${screenConfig.length}`);
-
-        const result = await axios.post("/api/generate-screen-ui", {
-          projectId,
-          screenId: screen?.screenId,
-          screenName: screen?.screenName,
-          purpose: screen?.purpose,
-          screenDescription: screen?.screenDescription,
-        });
-
-        const generatedCode = result.data?.code;
-
-        // Update only the specific screen
-        setScreenConfig((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, code: generatedCode } : item
-          )
+        setLoadingMsg(
+          `Generating Screen ${index + 1} of ${screenConfigOriginal.length}`
         );
+
+        // Use safe defaults
+        const screenId = screen?.id || screen?.screenId;
+        const screenName = screen?.screenName || `Screen ${index + 1}`;
+        const purpose = screen?.purpose || "No purpose provided";
+
+        if (!projectId || !screenId) {
+          console.error("❌ Missing essential IDs:", { projectId, screenId });
+          continue;
+        }
+
+        try {
+          const result = await axios.post("/api/generate-screen-ui", {
+            projectId,
+            screenId,
+            screenName,
+            purpose,
+            screenDescription: screen?.screenDescription || "",
+          });
+
+          const generatedCode = result.data?.code;
+
+          setScreenConfig((prev) =>
+            prev.map((item, i) =>
+              i === index ? { ...item, code: generatedCode } : item
+            )
+          );
+        } catch (error) {
+          console.error(`Error generating screen ${screenId}:`, error);
+        }
       }
     } catch (error) {
       console.error("Error generating screen UI:", error);
@@ -144,8 +169,8 @@ function ProjectCanvasPlayground() {
 
       <div className="flex">
         <SettingsSection projectDetail={projectDetail} />
+
         <div className="flex-1">
-          {/* Canvas Preview Area */}
           <Canvas
             projectDetail={projectDetail}
             screenConfig={screenConfig}
