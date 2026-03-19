@@ -5,52 +5,55 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { THEME_NAME_LIST, THEMES } from "@/data/Themes";
 import { ProjectType } from "@/type/type";
-import { Camera, Share } from "lucide-react";
+import { Camera, Loader2Icon, Share } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { SettingContext } from "@/context/SettingContext";
+import axios from "axios";
+import { RefreshDataContext } from "@/context/RefreshDataContext";
 
 const BRAND_COLOR = "oklch(0.696 0.1759 28.14)";
 
 type Props = {
   projectDetail: ProjectType | undefined;
+  screenDescrption: string | undefined;
 };
 
-function SettingsSection({ projectDetail }: Props) {
+function SettingsSection({ projectDetail, screenDescrption }: Props) {
   const [selectedTheme, setSelectedTheme] = useState("AUROR_INK");
   const [projectName, setProjectName] = useState("");
   const [userNewScreenInput, setUserNewScreenInput] = useState("");
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Generating...");
 
   const { setSettingDetail }: any = useContext(SettingContext);
+  const { setRefreshData } = useContext(RefreshDataContext);
 
-  /* ---------------- INIT ONLY ONCE ---------------- */
+  /* ---------------- INIT ---------------- */
   useEffect(() => {
-    if (!projectDetail || isInitialized) return;
+    if (!projectDetail) return;
 
-    setProjectName(projectDetail.projectName ?? "");
-    setSelectedTheme(projectDetail.theme ?? "AUROR_INK");
+    setProjectName(projectDetail.projectName || "");
+    setSelectedTheme(projectDetail.theme || "AUROR_INK");
 
     setSettingDetail((prev: any) => ({
       ...prev,
-      theme: projectDetail.theme ?? "AUROR_INK",
-      projectName: projectDetail.projectName ?? "",
+      theme: projectDetail.theme || "AUROR_INK",
+      projectName: projectDetail.projectName || "",
     }));
+  }, [projectDetail]);
 
-    setIsInitialized(true);
-  }, [projectDetail, isInitialized, setSettingDetail]);
-
-  /* ---------------- AUTO SAVE PROJECT NAME ---------------- */
+  /* ---------------- AUTO SAVE ---------------- */
   useEffect(() => {
     if (!projectDetail?.projectId) return;
 
     const timeout = setTimeout(async () => {
       try {
-        // ✅ FIXED API
         await fetch("/api/generateScreenConfig", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId: projectDetail.projectId,
-            projectName,
+            projectName: projectName,
           }),
         });
       } catch (err) {
@@ -61,7 +64,7 @@ function SettingsSection({ projectDetail }: Props) {
     return () => clearTimeout(timeout);
   }, [projectName, projectDetail?.projectId]);
 
-  /* ---------------- THEME SELECT ---------------- */
+  /* ---------------- THEME ---------------- */
   const onThemeSelect = async (theme: string) => {
     setSelectedTheme(theme);
 
@@ -71,15 +74,47 @@ function SettingsSection({ projectDetail }: Props) {
     }));
 
     if (projectDetail?.projectId) {
-      // ✅ FIXED API
       await fetch("/api/generateScreenConfig", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: projectDetail.projectId,
           theme,
         }),
       });
     }
+  };
+
+  /* ---------------- GENERATE SCREEN ---------------- */
+  const generateNewScreen = async () => {
+    if (!projectDetail?.projectId || !userNewScreenInput || loading) return;
+
+    setLoading(true);
+    setLoadingMsg("Generating screen...");
+
+    try {
+      const result = await axios.post("/api/generateScreenConfig", {
+        projectId: projectDetail.projectId,
+        userInput: userNewScreenInput,
+        device: projectDetail.device || "mobile",
+        theme: selectedTheme, // ✅ FIXED
+        oldScreenDescription: screenDescrption,
+      });
+
+      console.log("AI RESULT:", result.data);
+
+      setUserNewScreenInput("");
+
+      setRefreshData({
+        method: "screenConfig",
+        date: Date.now(),
+      });
+    } catch (err) {
+      console.error("AI ERROR:", err);
+      setLoadingMsg("Failed... try again");
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -90,12 +125,11 @@ function SettingsSection({ projectDetail }: Props) {
       <div className="mt-3">
         <h2 className="text-sm mb-2 font-semibold">Project Name</h2>
         <Input
-          placeholder="Project Name"
           value={projectName}
-          className="border-[var(--border)] focus:border-[var(--primary)] focus:ring-[var(--primary)]"
-          onChange={(event) => {
-            const value = event.target.value;
+          onChange={(e) => {
+            const value = e.target.value;
             setProjectName(value);
+
             setSettingDetail((prev: any) => ({
               ...prev,
               projectName: value,
@@ -104,41 +138,31 @@ function SettingsSection({ projectDetail }: Props) {
         />
       </div>
 
-      {/* Generate New Screen */}
+      {/* Generate Screen */}
       <div className="mt-6">
         <h2 className="text-sm mb-2 font-semibold">Generate New Screen</h2>
+
         <Textarea
-          placeholder="Enter Prompt to generate screen using AI"
+          placeholder="Enter Prompt..."
           value={userNewScreenInput}
-          className="border-[var(--border)] focus:border-[var(--primary)] focus:ring-[var(--primary)]"
-          onChange={(event) => setUserNewScreenInput(event.target.value)}
+          onChange={(e) => setUserNewScreenInput(e.target.value)}
         />
 
-        {/* ✅ ONLY ADDED onClick (NO OTHER CHANGE) */}
         <Button
           size="sm"
-          className="mt-3 w-full text-white shadow-md hover:shadow-lg transition"
+          className="mt-3 w-full text-white"
           style={{ backgroundColor: BRAND_COLOR }}
-          onClick={async () => {
-            if (!projectDetail?.projectId || !userNewScreenInput) return;
-
-            try {
-              await fetch("/api/generateScreenConfig", {
-                method: "POST",
-                body: JSON.stringify({
-                  projectId: projectDetail.projectId,
-                  userInput: userNewScreenInput,
-                  device: "mobile",
-                }),
-              });
-
-              setUserNewScreenInput("");
-            } catch (err) {
-              console.error("AI GENERATE ERROR:", err);
-            }
-          }}
+          onClick={generateNewScreen}
+          disabled={loading}
         >
-          Generate with AI
+          {loading ? (
+            <>
+              <Loader2Icon className="animate-spin mr-2" />
+              {loadingMsg}
+            </>
+          ) : (
+            "Generate with AI"
+          )}
         </Button>
       </div>
 
@@ -153,24 +177,19 @@ function SettingsSection({ projectDetail }: Props) {
               <div
                 key={theme}
                 onClick={() => onThemeSelect(theme)}
-                className={`space-y-1 p-4 border rounded-xl mb-2 cursor-pointer transition-all duration-200 ${
+                className={`p-4 border rounded-xl cursor-pointer ${
                   isSelected
                     ? "shadow-lg border-[var(--primary)] bg-[var(--card)]"
-                    : "hover:shadow-md hover:border-[var(--muted)]"
+                    : "hover:shadow-md"
                 }`}
               >
                 <h2 className="text-sm font-medium">{theme}</h2>
+
                 <div className="flex gap-2 mt-1">
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].primary }} />
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].secondary }} />
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].accent }} />
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].background }} />
-                  <div
-                    className="h-4 w-4 rounded-full"
-                    style={{
-                      background: `linear-gradient(135deg, ${THEMES[theme].background}, ${THEMES[theme].primary}, ${THEMES[theme].accent})`,
-                    }}
-                  />
                 </div>
               </div>
             );
@@ -182,10 +201,10 @@ function SettingsSection({ projectDetail }: Props) {
       <div className="mt-6">
         <h2 className="text-sm mb-2 font-semibold">Extras</h2>
         <div className="flex gap-3">
-          <Button size="sm" variant="outline" className="flex items-center gap-1">
+          <Button size="sm" variant="outline">
             <Camera /> Screenshot
           </Button>
-          <Button size="sm" variant="outline" className="flex items-center gap-1">
+          <Button size="sm" variant="outline">
             <Share /> Share
           </Button>
         </div>

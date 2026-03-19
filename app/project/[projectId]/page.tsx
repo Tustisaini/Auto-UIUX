@@ -18,26 +18,26 @@ function ProjectCanvasPlayground() {
   const [projectDetail, setProjectDetail] = useState<ProjectType>();
   const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
   const [screenConfigOriginal, setScreenConfigOriginal] = useState<ScreenConfig[]>([]);
-  const { settingsDetail, setSettingDetail } = useContext(SettingContext);
+
+  const { setSettingDetail } = useContext(SettingContext);
+  const { refreshData } = useContext(RefreshDataContext);
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Loading project");
- const{refreshData,setRefreshData}=useContext(RefreshDataContext);
+
   const hasGeneratedRef = useRef(false);
 
-  /* -------------------- Load Project -------------------- */
   useEffect(() => {
-    if (projectId) {
-      getProjectDetail();
-    }
+    if (projectId) getProjectDetail();
   }, [projectId]);
 
-  useEffect(()=>{
-    if(refreshData?.method=='screenConfig'){
+  useEffect(() => {
+    if (refreshData?.method === "screenConfig") {
+      hasGeneratedRef.current = false; // ✅ IMPORTANT FIX
       getProjectDetail();
     }
-  },[refreshData])
-  /* -------------------- Auto Generate UI -------------------- */
+  }, [refreshData]);
+
   useEffect(() => {
     if (
       projectDetail &&
@@ -50,34 +50,9 @@ function ProjectCanvasPlayground() {
     }
   }, [projectDetail, screenConfigOriginal]);
 
-  /* -------------------- Generate Screen Config -------------------- */
-  const generateScreenConfig = async (deviceType?: string, userInput?: string) => {
-    try {
-      setLoading(true);
-      setLoadingMsg("Generating screen config");
-
-      const result = await axios.post("/api/generateScreenConfig", {
-        projectId,
-        device: deviceType,
-        userInput,
-      });
-
-      const screens = result.data?.data?.screens ?? [];
-
-      setScreenConfig(screens);
-      setScreenConfigOriginal(screens);
-    } catch (error) {
-      console.error("Error generating screen config:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* -------------------- Get Project Detail -------------------- */
   const getProjectDetail = async () => {
     try {
       setLoading(true);
-      setLoadingMsg("Loading project");
 
       const result = await axios.get(`/api/project?projectId=${projectId}`);
 
@@ -85,22 +60,17 @@ function ProjectCanvasPlayground() {
       const config = result?.data?.screenConfig ?? [];
 
       setProjectDetail(detail);
-      setScreenConfigOriginal(config);
       setScreenConfig(config);
+      setScreenConfigOriginal(config);
 
-      setSettingDetail(detail); // unchanged
-
-      if (config.length === 0) {
-        await generateScreenConfig(detail?.device, detail?.userInput);
-      }
+      setSettingDetail(detail);
     } catch (error) {
-      console.error("Error fetching project:", error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  /* -------------------- Generate Screen UI -------------------- */
   const generateScreenUIUX = async () => {
     try {
       setLoading(true);
@@ -110,71 +80,43 @@ function ProjectCanvasPlayground() {
 
         if (screen?.code) continue;
 
-        setLoadingMsg(
-          `Generating Screen ${index + 1} of ${screenConfigOriginal.length}`
+        const result = await axios.post("/api/generate-screen-ui", {
+          projectId,
+          screenId: screen?.id || screen?.screenId,
+          screenName: screen?.screenName || `Screen ${index + 1}`,
+          purpose: screen?.purpose,
+        });
+
+        const code = result.data?.code;
+
+        setScreenConfig((prev) =>
+          prev.map((s, i) => (i === index ? { ...s, code } : s))
         );
-
-        // Use safe defaults
-        const screenId = screen?.id || screen?.screenId;
-        const screenName = screen?.screenName || `Screen ${index + 1}`;
-        const purpose = screen?.purpose || "No purpose provided";
-
-        if (!projectId || !screenId) {
-          console.error("❌ Missing essential IDs:", { projectId, screenId });
-          continue;
-        }
-
-        try {
-          const result = await axios.post("/api/generate-screen-ui", {
-            projectId,
-            screenId,
-            screenName,
-            purpose,
-            screenDescription: screen?.screenDescription || "",
-          });
-
-          const generatedCode = result.data?.code;
-
-          setScreenConfig((prev) =>
-            prev.map((item, i) =>
-              i === index ? { ...item, code: generatedCode } : item
-            )
-          );
-        } catch (error) {
-          console.error(`Error generating screen ${screenId}:`, error);
-        }
       }
-    } catch (error) {
-      console.error("Error generating screen UI:", error);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  /* -------------------- UI -------------------- */
   return (
     <div>
       <ProjectHeader />
 
       {loading && (
-        <div className="absolute left-1/2 top-20 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-blue-400 bg-blue-100 shadow-sm">
-            <Loader2Icon className="animate-spin text-blue-600" size={18} />
-            <span className="text-sm font-medium text-blue-700">
-              {loadingMsg}
-            </span>
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex gap-2 px-4 py-3 bg-blue-100 border rounded-xl">
+            <Loader2Icon className="animate-spin" />
+            {loadingMsg}
           </div>
         </div>
       )}
 
       <div className="flex">
-        <SettingsSection projectDetail={projectDetail} />
-
+        <SettingsSection projectDetail={projectDetail} screenDescrption={undefined} />
         <div className="flex-1">
-          <Canvas
-            projectDetail={projectDetail}
-            screenConfig={screenConfig}
-          />
+          <Canvas projectDetail={projectDetail} screenConfig={screenConfig} />
         </div>
       </div>
     </div>
