@@ -13,26 +13,21 @@ type Props = {
   loading?: boolean;
 };
 
-function Canvas({ projectDetail, screenConfig, loading }: Props) {
+function Canvas({ projectDetail, screenConfig }: Props) {
   const [panningEnabled, setPanningEnabled] = useState(true);
   const { settingsDetail }: any = useContext(SettingContext);
-
-  console.log("🟡 Canvas RENDER | Theme:", settingsDetail?.theme);
 
   const isMobile = projectDetail?.device === "mobile";
   const SCREEN_WIDTH = isMobile ? 400 : 600;
   const SCREEN_HEIGHT = 800;
   const GAP = isMobile ? 20 : 40;
 
-  useEffect(() => {
-    console.log("🎨 THEME CHANGED:", settingsDetail?.theme);
-  }, [settingsDetail?.theme]);
-
   return (
     <div
       className="w-full h-screen bg-gray-100 relative"
       style={{
-        backgroundImage: "radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)",
+        backgroundImage:
+          "radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)",
         backgroundSize: "20px 20px",
       }}
     >
@@ -47,7 +42,7 @@ function Canvas({ projectDetail, screenConfig, loading }: Props) {
       >
         {({ zoomIn, zoomOut, resetTransform }) => (
           <>
-            {/* Zoom Controls */}
+            {/* Controls */}
             <div className="absolute top-4 left-4 z-50 flex gap-2 bg-white p-2 rounded-lg shadow">
               <button onClick={() => zoomIn(0.1)}>+</button>
               <button onClick={() => zoomOut(0.1)}>-</button>
@@ -55,23 +50,21 @@ function Canvas({ projectDetail, screenConfig, loading }: Props) {
             </div>
 
             <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }}>
-              {/* Horizontal scroll container */}
               <div
                 className="flex items-start overflow-x-auto overflow-y-hidden py-5 px-3"
                 style={{ gap: GAP }}
               >
                 {screenConfig?.map((screen, index) => {
                   const screenId = `screen-${index}`;
-                  console.log("🟢 Rendering screen:", screenId);
 
                   return screen?.code ? (
                     <ScreenFrame
-                      key={`${screenId}-${settingsDetail?.theme}`}
+                      key={`${screenId}-${settingsDetail?.theme}-${screen.code}-${index}`}
                       screenId={screenId}
                       x={index * (SCREEN_WIDTH + GAP)}
                       y={0}
                       width={SCREEN_WIDTH}
-                      height={SCREEN_HEIGHT} // FIXED SIZE
+                      height={SCREEN_HEIGHT}
                       setPanningEnabled={setPanningEnabled}
                       htmlCode={screen.code}
                       projectDetail={projectDetail}
@@ -81,14 +74,11 @@ function Canvas({ projectDetail, screenConfig, loading }: Props) {
                     <div
                       key={`skeleton-${index}`}
                       className="bg-white rounded-2xl p-5 shadow-sm flex-shrink-0"
-                      style={{
-                        width: SCREEN_WIDTH,
-                        height: SCREEN_HEIGHT,
-                      }}
+                      style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
                     >
-                      <Skeleton className="w-full rounded-lg h-10 mb-4" />
-                      <Skeleton className="w-full rounded-lg h-32 mb-4" />
-                      <Skeleton className="w-3/4 rounded-lg h-6" />
+                      <Skeleton className="w-full h-10 mb-4" />
+                      <Skeleton className="w-full h-32 mb-4" />
+                      <Skeleton className="w-3/4 h-6" />
                     </div>
                   );
                 })}
