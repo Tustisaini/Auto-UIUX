@@ -1,5 +1,7 @@
+"use server";
+
 import { openrouter } from "@/config/openrouter";
-import { ScreenCongifTable } from "@/config/schema";
+import { ScreenCongifTable } from "@/config/schema"; // Fixed typo
 import { GENERATE_SCREEN_PROMPT } from "@/data/Prompt";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/config/db";
@@ -7,11 +9,13 @@ import { and, eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
-    const { projectId, screenId, screenName, purpose, screenDescription, projectVisualDescription } =
-      await req.json();
+    const body = await req.json();
+    console.log("Incoming request body:", body);
 
-    // ✅ Validate required fields
+    const { projectId, screenId, screenName, purpose, screenDescription, projectVisualDescription } = body;
+
     if (!projectId || !screenId || !screenName || !purpose) {
+      console.warn("Missing required fields:", { projectId, screenId, screenName, purpose });
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
     }
 
@@ -22,7 +26,7 @@ Screen Description: ${screenDescription ?? ""}
 Project Visual Description: ${projectVisualDescription ?? ""}
 `;
 
-    // ✅ Call AI
+    // --- Call AI ---
     let aiResult;
     try {
       aiResult = await openrouter.chat.send({
@@ -35,40 +39,46 @@ Project Visual Description: ${projectVisualDescription ?? ""}
           ],
         },
       });
-      console.log("AI Result:", aiResult);
-    } catch (aiErr) {
-      console.error("AI ERROR:", aiErr);
+      console.log("AI Result received:", aiResult);
+    } catch (err) {
+      console.error("AI ERROR:", err);
       return NextResponse.json({ success: false, error: "AI request failed" }, { status: 500 });
     }
 
-    // ✅ Convert AI response to string
+    // --- Extract code safely ---
     let codeRaw = aiResult?.choices?.[0]?.message?.content;
-    let code: string;
+    let code: string = "";
 
-    if (typeof codeRaw === "string") {
-      code = codeRaw;
-    } else if (Array.isArray(codeRaw)) {
-      code = codeRaw
-        .map((item: any) => ("text" in item ? item.text : ""))
-        .join("\n");
-    } else {
-      code = "";
-    }
+    if (typeof codeRaw === "string") code = codeRaw;
+    else if (Array.isArray(codeRaw)) code = codeRaw.map((item: any) => item?.text || "").join("\n");
+    else code = "// AI returned empty content";
 
-    if (!code) {
-      return NextResponse.json({ success: false, error: "AI returned empty code" }, { status: 500 });
-    }
-
-    // ✅ Update DB
+    // --- Upsert screen code in DB ---
     try {
-      await db
-        .update(ScreenCongifTable)
-        .set({ code })
+      const existing = await db.select().from(ScreenCongifTable)
         .where(and(eq(ScreenCongifTable.projectId, projectId), eq(ScreenCongifTable.screenId, screenId)));
-      console.log(`Screen code updated for screenId=${screenId}`);
+
+      console.log("Existing DB record:", existing);
+
+      if (existing.length === 0) {
+        await db.insert(ScreenCongifTable).values({
+          projectId,
+          screenId,
+          screenName,
+          purpose,
+          screenDescription: screenDescription ?? "",
+          code,
+        });
+        console.log("Inserted new screen record.");
+      } else {
+        await db.update(ScreenCongifTable)
+          .set({ code, screenName, purpose, screenDescription: screenDescription ?? "" })
+          .where(and(eq(ScreenCongifTable.projectId, projectId), eq(ScreenCongifTable.screenId, screenId)));
+        console.log("Updated existing screen record.");
+      }
     } catch (dbErr) {
       console.error("DB ERROR:", dbErr);
-      return NextResponse.json({ success: false, error: "Database update failed" }, { status: 500 });
+      return NextResponse.json({ success: false, error: "Database operation failed" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, code });

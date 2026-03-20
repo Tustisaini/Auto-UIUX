@@ -17,7 +17,8 @@ export const ProjectTable = pgTable('project',{
   createdOn:date().defaultNow(),
   config:json(),
   projectVisualDescription:text(),
-  userId: varchar().references(()=> usersTable.email).notNull()
+  userId: varchar().references(()=> usersTable.email).notNull(),
+ 
 })
 
 export const ScreenCongifTable=pgTable('screenConfig',{

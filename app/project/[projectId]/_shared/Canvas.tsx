@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import ScreenFrame from "./ScreenFrame";
 import { ProjectType, ScreenConfig } from "@/type/type";
@@ -13,7 +13,7 @@ type Props = {
   loading?: boolean;
 };
 
-function Canvas({ projectDetail, screenConfig }: Props) {
+function Canvas({ projectDetail, screenConfig, loading }: Props) {
   const [panningEnabled, setPanningEnabled] = useState(true);
   const { settingsDetail }: any = useContext(SettingContext);
 
@@ -26,8 +26,7 @@ function Canvas({ projectDetail, screenConfig }: Props) {
     <div
       className="w-full h-screen bg-gray-100 relative"
       style={{
-        backgroundImage:
-          "radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)",
         backgroundSize: "20px 20px",
       }}
     >
@@ -56,12 +55,13 @@ function Canvas({ projectDetail, screenConfig }: Props) {
               >
                 {screenConfig?.map((screen, index) => {
                   const screenId = `screen-${index}`;
+                  const initialX = index * (SCREEN_WIDTH + GAP); // non-overlapping
 
                   return screen?.code ? (
                     <ScreenFrame
                       key={`${screenId}-${settingsDetail?.theme}-${screen.code}-${index}`}
                       screenId={screenId}
-                      x={index * (SCREEN_WIDTH + GAP)}
+                      x={initialX}
                       y={0}
                       width={SCREEN_WIDTH}
                       height={SCREEN_HEIGHT}
@@ -69,6 +69,8 @@ function Canvas({ projectDetail, screenConfig }: Props) {
                       htmlCode={screen.code}
                       projectDetail={projectDetail}
                       screen={screen}
+                      index={index}               // ✅ fixed
+                      total={screenConfig.length} // ✅ fixed
                     />
                   ) : (
                     <div
