@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { THEME_NAME_LIST, THEMES } from "@/data/Themes";
 import { ProjectType } from "@/type/type";
-import { Camera, Loader2Icon, Share } from "lucide-react";
+import { Loader2Icon, Share } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { SettingContext } from "@/context/SettingContext";
 import axios from "axios";
 import { RefreshDataContext } from "@/context/RefreshDataContext";
+import { toast } from "sonner";
 
 const BRAND_COLOR = "oklch(0.696 0.1759 28.14)";
 
@@ -32,28 +33,30 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
   useEffect(() => {
     if (!projectDetail) return;
 
-    setProjectName(projectDetail.projectName || "");
+    const name = projectDetail.projectName || "Untitled Project";
+
+    setProjectName(name);
     setSelectedTheme(projectDetail.theme || "AUROR_INK");
 
     setSettingDetail((prev: any) => ({
       ...prev,
       theme: projectDetail.theme || "AUROR_INK",
-      projectName: projectDetail.projectName || "",
+      projectName: name,
     }));
   }, [projectDetail]);
 
-  /* ---------------- AUTO SAVE ---------------- */
+  /* ---------------- AUTO SAVE PROJECT NAME ---------------- */
   useEffect(() => {
     if (!projectDetail?.projectId) return;
 
     const timeout = setTimeout(async () => {
       try {
-        await fetch("/api/generateScreenConfig", {
-          method: "POST",
+        await fetch("/api/project", {
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId: projectDetail.projectId,
-            projectName: projectName,
+            projectName, // Only save project name, header untouched
           }),
         });
       } catch (err) {
@@ -68,10 +71,7 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
   const onThemeSelect = async (theme: string) => {
     setSelectedTheme(theme);
 
-    setSettingDetail((prev: any) => ({
-      ...prev,
-      theme,
-    }));
+    setSettingDetail((prev: any) => ({ ...prev, theme }));
 
     if (projectDetail?.projectId) {
       await fetch("/api/generateScreenConfig", {
@@ -93,28 +93,35 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
     setLoadingMsg("Generating screen...");
 
     try {
-      const result = await axios.post("/api/generateScreenConfig", {
+      await axios.post("/api/generateScreenConfig", {
         projectId: projectDetail.projectId,
         userInput: userNewScreenInput,
         device: projectDetail.device || "mobile",
-        theme: selectedTheme, // ✅ FIXED
+        theme: selectedTheme,
         oldScreenDescription: screenDescrption,
       });
 
-      console.log("AI RESULT:", result.data);
-
       setUserNewScreenInput("");
-
-      setRefreshData({
-        method: "screenConfig",
-        date: Date.now(),
-      });
+      setRefreshData({ method: "screenConfig", date: Date.now() });
     } catch (err) {
       console.error("AI ERROR:", err);
       setLoadingMsg("Failed... try again");
     }
 
     setLoading(false);
+  };
+
+  /* ---------------- SHARE PROJECT ---------------- */
+  const shareProject = async () => {
+    if (!projectDetail?.projectId) return;
+    const url = `${window.location.origin}/project/${projectDetail.projectId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Project link copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy link", err);
+      toast.error("Failed to copy link");
+    }
   };
 
   return (
@@ -124,30 +131,17 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
       {/* Project Name */}
       <div className="mt-3">
         <h2 className="text-sm mb-2 font-semibold">Project Name</h2>
-        <Input
-          value={projectName}
-          onChange={(e) => {
-            const value = e.target.value;
-            setProjectName(value);
-
-            setSettingDetail((prev: any) => ({
-              ...prev,
-              projectName: value,
-            }));
-          }}
-        />
+        <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
       </div>
 
       {/* Generate Screen */}
       <div className="mt-6">
         <h2 className="text-sm mb-2 font-semibold">Generate New Screen</h2>
-
         <Textarea
           placeholder="Enter Prompt..."
           value={userNewScreenInput}
           onChange={(e) => setUserNewScreenInput(e.target.value)}
         />
-
         <Button
           size="sm"
           className="mt-3 w-full text-white"
@@ -172,7 +166,6 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
         <div className="h-[220px] overflow-auto space-y-3">
           {THEME_NAME_LIST.map((theme) => {
             const isSelected = theme === selectedTheme;
-
             return (
               <div
                 key={theme}
@@ -184,7 +177,6 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
                 }`}
               >
                 <h2 className="text-sm font-medium">{theme}</h2>
-
                 <div className="flex gap-2 mt-1">
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].primary }} />
                   <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].secondary }} />
@@ -197,14 +189,11 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
         </div>
       </div>
 
-      {/* Extras */}
+      {/* Extras: Share Only */}
       <div className="mt-6">
         <h2 className="text-sm mb-2 font-semibold">Extras</h2>
         <div className="flex gap-3">
-          <Button size="sm" variant="outline">
-            <Camera /> Screenshot
-          </Button>
-          <Button size="sm" variant="outline">
+          <Button size="sm" variant="outline" onClick={shareProject}>
             <Share /> Share
           </Button>
         </div>
