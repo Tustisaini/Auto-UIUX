@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 
 function Hero() {
-  const [userInput, setUserInput] = useState<string>(""); // fixed
+  const [userInput, setUserInput] = useState<string>("");
   const [device, setDevice] = useState<string>("website");
   const { user } = useUser();
   const router = useRouter();
@@ -35,23 +35,23 @@ function Hero() {
       return;
     }
 
-    // create new Project
     setloading(true);
 
-    const projectId = crypto.randomUUID(); // browser-safe
-
     const result = await axios.post("/api/project", {
-      userInput: userInput,
-      device: device,
-      projectId: projectId,
+      userInput,
+      device,
     });
 
-    console.log(result.data);
-    setloading(false);
+    // ✅ FIXED LINE
+    const projectId = result?.data?.projectId;
 
-    //Navigate to project Route
+    if (!projectId) {
+      console.error("ProjectId missing:", result.data);
+      setloading(false);
+      return;
+    }
 
-    router.push('/project/'+projectId);
+    router.push("/project/" + projectId);
   };
 
   return (
@@ -89,11 +89,12 @@ function Hero() {
         </span>{" "}
         Designs
       </h2>
+
       <p className="text-center text-gray-600 text-lg mt-3">
         Imagine your idea and turn it into reality
       </p>
 
-      {/* Input / Select / Send */}
+      {/* Input */}
       <div className="flex mt-6 w-full gap-4 items-center justify-center">
         <InputGroup className="max-w-xl bg-white rounded-2xl">
           <InputGroupTextarea
@@ -103,6 +104,7 @@ function Hero() {
             value={userInput}
             onChange={(event) => setUserInput(event.target.value)}
           />
+
           <InputGroupAddon align="block-end" className="flex items-center gap-2">
             <Select
               defaultValue="website"

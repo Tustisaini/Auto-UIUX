@@ -1,19 +1,18 @@
-// ScreenFrame.tsx
-import { themeToCssVars } from '@/data/Themes';
-import { ProjectType } from '@/type/type';
-import { GripVertical } from 'lucide-react';
-import React from 'react';
+import { THEMES, themeToCssVars } from "@/data/Themes";
+import { ProjectType } from "@/type/type";
+import { GripVertical } from "lucide-react";
+import React, { useState } from "react";
 import { Rnd } from "react-rnd";
 
 type Props = {
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  setPanningEnabled: (enabled: boolean) => void,
-  screenId?: string,
-  htmlCode: string | undefined,
-  projectDetail: ProjectType | undefined
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  setPanningEnabled: (enabled: boolean) => void;
+  screenId?: string;
+  htmlCode: string | undefined;
+  projectDetail: ProjectType | undefined;
 };
 
 function ScreenFrame({
@@ -22,14 +21,14 @@ function ScreenFrame({
   setPanningEnabled,
   width,
   height,
-  screenId,
   htmlCode,
-  projectDetail
+  projectDetail,
 }: Props) {
+  const themeKey = projectDetail?.theme as keyof typeof THEMES;
+  const theme = THEMES?.[themeKey];
 
-  // Safely get theme from projectDetail
-  const selectedTheme = projectDetail?.theme as any;
-  const theme = selectedTheme ? selectedTheme : null;
+  // ✅ controlled state (fixes drag bugs)
+  const [position, setPosition] = useState({ x, y });
 
   const html = `
 <!doctype html>
@@ -37,17 +36,16 @@ function ScreenFrame({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
 
   <style>
-    ${theme ? themeToCssVars(projectDetail?.theme) : ""}
+    ${theme ? themeToCssVars(theme) : ""}
+    body {
+      margin: 0;
+    }
   </style>
 </head>
+
 <body class="bg-[var(--background)] text-[var(--foreground)] w-full">
   ${htmlCode ?? ""}
 </body>
@@ -56,34 +54,35 @@ function ScreenFrame({
 
   return (
     <Rnd
-      default={{
-        x,
-        y,
-        width,
-        height
-      }}
+      size={{ width, height }}
+      position={position}
       minWidth={200}
-      maxWidth={width}
       minHeight={200}
-      maxHeight={height}
-      dragHandleClassName='drag-handle'
-      enableResizing={{
-        bottomRight: true,
-        bottomLeft: true
-      }}
+      bounds="parent"
+      enableResizing={true}
+      dragHandleClassName="drag-handle"
+
       onDragStart={() => setPanningEnabled(false)}
-      onDragStop={() => setPanningEnabled(true)}
-      onResizeStart={() => setPanningEnabled(false)}
-      onResizeStop={() => setPanningEnabled(true)}
+
+      onDragStop={(e, d) => {
+        setPosition({ x: d.x, y: d.y });
+        setPanningEnabled(true);
+      }}
+
+      onResizeStop={(e, direction, ref, delta, pos) => {
+        setPosition(pos);
+      }}
     >
-      <div className='drag-handle flex gap-2 items-center cursor-move bg-white rounded-lg p-4'>
-        <GripVertical className='text-gray-500 h-4 w-4' />
-        Drag here
+      {/* HEADER / DRAG HANDLE */}
+      <div className="drag-handle flex items-center gap-2 p-2 bg-white border-b cursor-move select-none">
+        <GripVertical size={16} />
+        <span className="text-sm">Screen</span>
       </div>
 
+      {/* IFRAME */}
       <iframe
-        className='w-full h-[calc(100%-40px)] bg-white rounded-3xl mt-3'
-        sandbox='allow-same-origin allow-scripts'
+        className="w-full h-[calc(100%-36px)] bg-white"
+        sandbox="allow-scripts allow-same-origin"
         srcDoc={html}
       />
     </Rnd>

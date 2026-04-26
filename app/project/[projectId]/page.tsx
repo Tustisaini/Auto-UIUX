@@ -10,150 +10,115 @@ import { Loader2Icon } from "lucide-react";
 import Canvas from "./_shared/Canvas";
 
 function ProjectCanvasPlayground() {
-  const params = useParams();
-  const projectId = params?.projectId as string;
+const params = useParams();
+const projectId = params?.projectId as string;
 
-  const [projectDetail, setProjectDetail] = useState<ProjectType>();
-  
-  const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
-  const [screenConfigOriginal, setScreenConfigOriginal] = useState<ScreenConfig[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState("Loading project");
+const [projectDetail, setProjectDetail] = useState<ProjectType>();
+const [screenConfig, setScreenConfig] = useState<ScreenConfig[]>([]);
+const [loading, setLoading] = useState(false);
+const [loadingMsg, setLoadingMsg] = useState("Loading project");
 
-  // Prevent duplicate generation calls
-  const hasGeneratedRef = useRef(false);
+const abortRef = useRef<AbortController | null>(null);
+const hasFetchedOnce = useRef(false);
 
-  /* -------------------- Load Project -------------------- */
-  useEffect(() => {
-    if (projectId) {
-      getProjectDetail();
-    }
-  }, [projectId]);
+/* ================= LOAD PROJECT ================= */
+useEffect(() => {
+if (!projectId) return;
 
-  /* -------------------- Auto Generate UI -------------------- */
-  useEffect(() => {
-    if (
-      projectDetail &&
-      screenConfigOriginal.length > 0 &&
-      screenConfigOriginal.some((screen) => !screen.code) &&
-      !hasGeneratedRef.current
-    ) {
-      hasGeneratedRef.current = true;
-      generateScreenUIUX();
-    }
-  }, [projectDetail, screenConfigOriginal]);
+getProjectDetail();
 
-  /* -------------------- Generate Screen Config -------------------- */
-  const generateScreenConfig = async (deviceType?: string, userInput?: string) => {
-    try {
-      setLoading(true);
-      setLoadingMsg("Generating screen config");
+return () => {
+abortRef.current?.abort();
+};
+}, [projectId]);
 
-      const result = await axios.post("/api/generate-config", {
-        projectId,
-        deviceType,
-        userInput,
-      });
+/* ================= FETCH PROJECT ================= */
+const getProjectDetail = async () => {
+try {
+setLoading(true);
 
-      const screens = result.data?.JSONAiResult?.screens ?? [];
-      setScreenConfig(screens);
-      setScreenConfigOriginal(screens); // keep original copy
-    } catch (error) {
-      console.error("Error generating screen config:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const result = await axios.get(
+`/api/project?projectId=${projectId}`
+);
 
-  /* -------------------- Get Project Detail -------------------- */
-  const getProjectDetail = async () => {
-    try {
-      setLoading(true);
-      setLoadingMsg("Loading project");
+const project = result?.data?.projectDetail;
+const screens = result?.data?.screenConfig ?? [];
 
-      const result = await axios.get(`/api/project?projectId=${projectId}`);
+setProjectDetail(project);
 
-      const detail = result?.data?.projectDetail;
-      const config = result?.data?.screenConfig ?? [];
+// ❌ NEVER render empty array (prevents flicker)
+if (screens.length > 0) {
+setScreenConfig(screens);
+}
 
-      setProjectDetail(detail);
-      setScreenConfigOriginal(config);  // fixed
-      setScreenConfig(config);
+// ✅ trigger AI generation only once
+if (screens.length === 0 && !hasFetchedOnce.current) {
+hasFetchedOnce.current = true;
 
-      if (config.length === 0) {
-        await generateScreenConfig(detail?.device, detail?.userInput);
-      }
-    } catch (error) {
-      console.error("Error fetching project:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+await generateScreenUIUX();
 
-  /* -------------------- Generate Screen UI -------------------- */
-  const generateScreenUIUX = async () => {
-    try {
-      setLoading(true);
+const refreshed = await axios.get(
+`/api/project?projectId=${projectId}`
+);
 
-      for (let index = 0; index < screenConfig.length; index++) {
-        const screen = screenConfig[index];
+const newScreens = refreshed?.data?.screenConfig ?? [];
 
-        if (screen?.code) continue;
+if (newScreens.length > 0) {
+setScreenConfig(newScreens);
+}
+}
 
-        setLoadingMsg(`Generating Screen ${index + 1} of ${screenConfig.length}`);
+} catch (error: any) {
+console.error("Fetch error:", error);
+} finally {
+setLoading(false);
+}
+};
 
-        const result = await axios.post("/api/generate-screen-ui", {
-          projectId,
-          screenId: screen?.screenId,
-          screenName: screen?.screenName,
-          purpose: screen?.purpose,
-          screenDescription: screen?.screenDescription,
-        });
+/* ================= GENERATE UI ================= */
+const generateScreenUIUX = async () => {
+try {
+if (!projectId) return;
 
-        const generatedCode = result.data?.code;
+setLoading(true);
+setLoadingMsg("Generating UI...");
 
-        // Update only the specific screen
-        setScreenConfig((prev) =>
-          prev.map((item, i) =>
-            i === index ? { ...item, code: generatedCode } : item
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error generating screen UI:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+await axios.post("/api/generate-screen-ui/route.ts", {
+projectId,
+});
+} catch (error) {
+console.error("Generate error:", error);
+} finally {
+setLoading(false);
+}
+};
 
-  /* -------------------- UI -------------------- */
-  return (
-    <div>
-      <ProjectHeader />
+/* ================= UI ================= */
+return (
+<div>
+<ProjectHeader />
 
-      {loading && (
-        <div className="absolute left-1/2 top-20 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-blue-400 bg-blue-100 shadow-sm">
-            <Loader2Icon className="animate-spin text-blue-600" size={18} />
-            <span className="text-sm font-medium text-blue-700">
-              {loadingMsg}
-            </span>
-          </div>
-        </div>
-      )}
+{loading && (
+<div className="absolute left-1/2 top-20 -translate-x-1/2 z-50">
+<div className="flex items-center gap-2 px-4 py-3 rounded-xl border bg-blue-100 shadow-sm">
+<Loader2Icon className="animate-spin" size={18} />
+<span className="text-sm">{loadingMsg}</span>
+</div>
+</div>
+)}
 
-      <div className="flex">
-        <SettingsSection projectDetail={projectDetail} />
-        <div className="flex-1">
-          {/* Canvas Preview Area */}
-          <Canvas
-            projectDetail={projectDetail}
-            screenConfig={screenConfig}
-          />
-        </div>
-      </div>
-    </div>
-  );
+<div className="flex">
+<SettingsSection projectDetail={projectDetail} />
+
+<div className="flex-1">
+<Canvas
+projectDetail={projectDetail}
+screenConfig={screenConfig}
+/>
+</div>
+</div>
+</div>
+);
 }
 
 export default ProjectCanvasPlayground;
