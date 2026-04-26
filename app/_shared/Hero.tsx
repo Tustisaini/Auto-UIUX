@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { ChevronRight, Loader, Send } from "lucide-react";
 import {
   InputGroup,
@@ -23,20 +23,11 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 
 function Hero() {
-
-  const [mounted, setMounted] = useState(false);
-
   const [userInput, setUserInput] = useState<string>("");
   const [device, setDevice] = useState<string>("website");
   const { user } = useUser();
   const router = useRouter();
   const [loading, setloading] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   const onCreateProject = async () => {
     if (!user) {
@@ -46,28 +37,30 @@ function Hero() {
 
     setloading(true);
 
-    const projectId = crypto.randomUUID();
-
     const result = await axios.post("/api/project", {
-      userInput: userInput,
-      device: device,
-      projectId: projectId,
+      userInput,
+      device,
     });
 
-    console.log(result.data);
-    setloading(false);
+    // ✅ FIXED LINE
+    const projectId = result?.data?.projectId;
+
+    if (!projectId) {
+      console.error("ProjectId missing:", result.data);
+      setloading(false);
+      return;
+    }
 
     router.push("/project/" + projectId);
   };
 
   return (
     <div className="p-10 md:px-24 lg:px-48 xl:px-60 mt-20">
-
       {/* Gradient Banner */}
       <div className="group relative max-w-sm mx-auto flex items-center justify-center rounded-full px-4 py-2 shadow-[inset_0_-8px_10px_#8fdfff1f] transition-shadow duration-500 ease-out hover:shadow-[inset_0_-5px_10px_#8fdfff3f]">
         <span
           className={cn(
-            "animate-gradient absolute inset-0 block h-full w-full rounded-full bg-linear-to-r from-[#ffaa40]/50 via-[#9c40ff]/50 to-[#ffaa40]/50 bg-size-[300%_100%] p-px"
+            "animate-gradient absolute inset-0 block h-full w-full rounded-full bg-gradient-to-r from-[#ffaa40]/50 via-[#9c40ff]/50 to-[#ffaa40]/50 bg-[length:300%_100%] p-[1px]"
           )}
           style={{
             WebkitMask:
@@ -101,10 +94,9 @@ function Hero() {
         Imagine your idea and turn it into reality
       </p>
 
-      {/* Input / Select / Send */}
+      {/* Input */}
       <div className="flex mt-6 w-full gap-4 items-center justify-center">
         <InputGroup className="max-w-xl bg-white rounded-2xl">
-
           <InputGroupTextarea
             data-slot="input-group-control"
             className="flexfield-sizing-content min-h-24 w-full resize-none rounded-md bg-transparent px-3 py-2.5 text-base outline-none transition-[color,box-shadow] md:text-sm"
@@ -114,20 +106,17 @@ function Hero() {
           />
 
           <InputGroupAddon align="block-end" className="flex items-center gap-2">
-
             <Select
               defaultValue="website"
               onValueChange={(value) => setDevice(value)}
             >
-              <SelectTrigger className="w-45">
+              <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
-
               <SelectContent>
                 <SelectItem value="website">Website</SelectItem>
                 <SelectItem value="mobile">Mobile</SelectItem>
               </SelectContent>
-
             </Select>
 
             <InputGroupButton
@@ -140,9 +129,7 @@ function Hero() {
             >
               {loading ? <Loader className="animate-spin" /> : <Send />}
             </InputGroupButton>
-
           </InputGroupAddon>
-
         </InputGroup>
       </div>
 
@@ -151,7 +138,7 @@ function Hero() {
         {suggestions.map((suggestion, index) => (
           <div
             key={index}
-            className="flex flex-col items-center justify-center bg-white cursor-pointer rounded-xl shadow-sm hover:shadow-md transition p-4 flex-1 min-w-30"
+            className="flex flex-col items-center justify-center bg-white cursor-pointer rounded-xl shadow-sm hover:shadow-md transition p-4 flex-1 min-w-[120px]"
             onClick={() => setUserInput(suggestion.description)}
           >
             <div className="mb-2">{suggestion.icon}</div>
@@ -161,7 +148,6 @@ function Hero() {
           </div>
         ))}
       </div>
-
     </div>
   );
 }

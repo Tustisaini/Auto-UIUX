@@ -5,183 +5,176 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { THEME_NAME_LIST, THEMES } from "@/data/Themes";
 import { ProjectType } from "@/type/type";
-import { Loader2Icon, Share } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
-import { SettingContext } from "@/context/SettingContext";
+import { Camera, Share } from "lucide-react";
+import { useEffect, useState } from "react";
 import axios from "axios";
-import { RefreshDataContext } from "@/context/RefreshDataContext";
-import { toast } from "sonner";
 
 const BRAND_COLOR = "oklch(0.696 0.1759 28.14)";
 
 type Props = {
   projectDetail: ProjectType | undefined;
-  screenDescrption: string | undefined;
 };
 
-function SettingsSection({ projectDetail, screenDescrption }: Props) {
-  const [selectedTheme, setSelectedTheme] = useState("AUROR_INK");
+function SettingsSection({ projectDetail }: Props) {
+  const [selectedTheme, setSelectedTheme] =
+    useState<keyof typeof THEMES>("AURORA_INK");
+
   const [projectName, setProjectName] = useState("");
   const [userNewScreenInput, setUserNewScreenInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState("Generating...");
 
-  const { setSettingDetail }: any = useContext(SettingContext);
-  const { setRefreshData } = useContext(RefreshDataContext);
+  const [isThemeTouched, setIsThemeTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  /* ---------------- INIT ---------------- */
+  /* ================= SYNC PROJECT ================= */
   useEffect(() => {
     if (!projectDetail) return;
 
-    const name = projectDetail.projectName || "Untitled Project";
+    setProjectName(projectDetail.projectName ?? "");
 
-    setProjectName(name);
-    setSelectedTheme(projectDetail.theme || "AUROR_INK");
+    if (!isThemeTouched && projectDetail.theme) {
+      setSelectedTheme(projectDetail.theme as keyof typeof THEMES);
+    }
+  }, [projectDetail, isThemeTouched]);
 
-    setSettingDetail((prev: any) => ({
-      ...prev,
-      theme: projectDetail.theme || "AUROR_INK",
-      projectName: name,
-    }));
-  }, [projectDetail]);
-
-  /* ---------------- AUTO SAVE PROJECT NAME ---------------- */
+  /* ================= SAVE PROJECT NAME (DEBOUNCED) ================= */
   useEffect(() => {
     if (!projectDetail?.projectId) return;
 
-    const timeout = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
-        await fetch("/api/project", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId: projectDetail.projectId,
-            projectName, // Only save project name, header untouched
-          }),
+        await axios.put("/api/project", {
+          projectId: projectDetail.projectId,
+          projectName,
         });
       } catch (err) {
-        console.error("SAVE ERROR:", err);
+        console.error("Project name update failed:", err);
       }
     }, 600);
 
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(timer);
   }, [projectName, projectDetail?.projectId]);
 
-  /* ---------------- THEME ---------------- */
-  const onThemeSelect = async (theme: string) => {
+  /* ================= THEME UPDATE ================= */
+  const updateTheme = async (theme: keyof typeof THEMES) => {
+    if (!projectDetail?.projectId) return;
+
+    const prevTheme = selectedTheme;
+
     setSelectedTheme(theme);
+    setIsThemeTouched(true);
+    setSaving(true);
 
-    setSettingDetail((prev: any) => ({ ...prev, theme }));
-
-    if (projectDetail?.projectId) {
-      await fetch("/api/generateScreenConfig", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: projectDetail.projectId,
-          theme,
-        }),
+    try {
+      await axios.put("/api/project", {
+        projectId: projectDetail.projectId,
+        theme,
       });
+    } catch (err) {
+      console.error("Theme update failed:", err);
+      setSelectedTheme(prevTheme); // rollback
+    } finally {
+      setSaving(false);
     }
   };
 
-  /* ---------------- GENERATE SCREEN ---------------- */
-  const generateNewScreen = async () => {
-    if (!projectDetail?.projectId || !userNewScreenInput || loading) return;
-
-    setLoading(true);
-    setLoadingMsg("Generating screen...");
+  /* ================= AI SCREEN GENERATION ================= */
+  const generateScreen = async () => {
+    if (!projectDetail?.projectId || !userNewScreenInput) return;
 
     try {
-      await axios.post("/api/generateScreenConfig", {
+      setSaving(true);
+
+      await axios.post("/api/generate-project", {
         projectId: projectDetail.projectId,
         userInput: userNewScreenInput,
-        device: projectDetail.device || "mobile",
-        theme: selectedTheme,
-        oldScreenDescription: screenDescrption,
+        deviceType: projectDetail.device,
       });
 
       setUserNewScreenInput("");
-      setRefreshData({ method: "screenConfig", date: Date.now() });
     } catch (err) {
-      console.error("AI ERROR:", err);
-      setLoadingMsg("Failed... try again");
-    }
-
-    setLoading(false);
-  };
-
-  /* ---------------- SHARE PROJECT ---------------- */
-  const shareProject = async () => {
-    if (!projectDetail?.projectId) return;
-    const url = `${window.location.origin}/project/${projectDetail.projectId}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Project link copied to clipboard!");
-    } catch (err) {
-      console.error("Failed to copy link", err);
-      toast.error("Failed to copy link");
+      console.error("AI generation failed:", err);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="w-75 min-h-screen p-6 border-r bg-[var(--background)] text-[var(--foreground)]">
-      <h2 className="font-bold text-xl mb-4">Settings</h2>
+    <div className="w-75 min-h-screen p-5 border-r">
+      <h2 className="font-bold text-lg">Settings</h2>
 
-      {/* Project Name */}
+      {/* PROJECT NAME */}
       <div className="mt-3">
-        <h2 className="text-sm mb-2 font-semibold">Project Name</h2>
-        <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+        <h2 className="text-sm mb-1 font-semibold">Project Name</h2>
+        <Input
+          placeholder="Project Name"
+          value={projectName}
+          onChange={(e) => setProjectName(e.target.value)}
+        />
       </div>
 
-      {/* Generate Screen */}
-      <div className="mt-6">
-        <h2 className="text-sm mb-2 font-semibold">Generate New Screen</h2>
+      {/* GENERATE SCREEN */}
+      <div className="mt-5">
+        <h2 className="text-sm mb-1 font-semibold">
+          Generate New Screen
+        </h2>
+
         <Textarea
-          placeholder="Enter Prompt..."
+          placeholder="Enter Prompt to generate screen using AI"
           value={userNewScreenInput}
           onChange={(e) => setUserNewScreenInput(e.target.value)}
         />
+
         <Button
           size="sm"
-          className="mt-3 w-full text-white"
+          className="mt-2 w-full text-white"
           style={{ backgroundColor: BRAND_COLOR }}
-          onClick={generateNewScreen}
-          disabled={loading}
+          onClick={generateScreen}
+          disabled={saving}
         >
-          {loading ? (
-            <>
-              <Loader2Icon className="animate-spin mr-2" />
-              {loadingMsg}
-            </>
-          ) : (
-            "Generate with AI"
-          )}
+          Generate with AI
         </Button>
       </div>
 
-      {/* Themes */}
-      <div className="mt-6">
-        <h2 className="text-sm mb-2 font-semibold">Themes</h2>
-        <div className="h-[220px] overflow-auto space-y-3">
+      {/* THEMES */}
+      <div className="mt-5">
+        <h2 className="text-sm mb-1 font-semibold">Themes</h2>
+
+        <div className="h-[200px] overflow-auto space-y-3">
           {THEME_NAME_LIST.map((theme) => {
             const isSelected = theme === selectedTheme;
+
             return (
               <div
                 key={theme}
-                onClick={() => onThemeSelect(theme)}
-                className={`p-4 border rounded-xl cursor-pointer ${
-                  isSelected
-                    ? "shadow-lg border-[var(--primary)] bg-[var(--card)]"
-                    : "hover:shadow-md"
-                }`}
+                onClick={() => updateTheme(theme)}
+                className="space-y-1 p-3 border rounded-xl cursor-pointer transition"
+                style={{
+                  borderColor: isSelected ? BRAND_COLOR : undefined,
+                  backgroundColor: isSelected
+                    ? `color-mix(in oklch, ${BRAND_COLOR} 20%, transparent)`
+                    : undefined,
+                  opacity: saving ? 0.6 : 1,
+                }}
               >
                 <h2 className="text-sm font-medium">{theme}</h2>
-                <div className="flex gap-2 mt-1">
-                  <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].primary }} />
-                  <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].secondary }} />
-                  <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].accent }} />
-                  <div className="h-4 w-4 rounded-full" style={{ background: THEMES[theme].background }} />
+
+                <div className="flex gap-2">
+                  <div
+                    className="h-4 w-4 rounded-full"
+                    style={{ background: THEMES[theme].primary }}
+                  />
+                  <div
+                    className="h-4 w-4 rounded-full"
+                    style={{ background: THEMES[theme].secondary }}
+                  />
+                  <div
+                    className="h-4 w-4 rounded-full"
+                    style={{ background: THEMES[theme].accent }}
+                  />
+                  <div
+                    className="h-4 w-4 rounded-full"
+                    style={{ background: THEMES[theme].background }}
+                  />
                 </div>
               </div>
             );
@@ -189,12 +182,19 @@ function SettingsSection({ projectDetail, screenDescrption }: Props) {
         </div>
       </div>
 
-      {/* Extras: Share Only */}
-      <div className="mt-6">
-        <h2 className="text-sm mb-2 font-semibold">Extras</h2>
+      {/* EXTRAS */}
+      <div className="mt-5">
+        <h2 className="text-sm mb-1 font-semibold">Extras</h2>
+
         <div className="flex gap-3">
-          <Button size="sm" variant="outline" onClick={shareProject}>
-            <Share /> Share
+          <Button size="sm" variant="outline">
+            <Camera />
+            Screenshot
+          </Button>
+
+          <Button size="sm" variant="outline">
+            <Share />
+            Share
           </Button>
         </div>
       </div>

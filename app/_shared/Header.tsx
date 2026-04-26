@@ -20,14 +20,7 @@ function Header() {
 
       {/* Navigation */}
       <nav>
-        <ul className="flex items-center gap-6 font-medium text-gray-700">
-          <li className="cursor-pointer hover:text-[oklch(0.696_0.1759_28.14)] transition-colors">
-            Home
-          </li>
-          <li className="cursor-pointer hover:text-[oklch(0.696_0.1759_28.14)] transition-colors">
-            Pricing
-          </li>
-        </ul>
+        
       </nav>
 
       {/* Auth Section */}

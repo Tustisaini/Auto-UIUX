@@ -1,175 +1,254 @@
-"use server";
-
-import { db } from "@/config/db";
-import { ProjectTable, ScreenCongifTable } from "@/config/schema";
-import { currentUser } from "@clerk/nextjs/server";
-import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { openrouter } from "@/config/openrouter";
+import { db } from "@/config/db";
+import { ProjectTable, ScreenConfigTable } from "@/config/schema";
+import { currentUser } from "@clerk/nextjs/server";
+import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
-/* ================================
-   🧠 AI PROJECT NAME GENERATOR
-================================ */
-async function generateProjectName(userInput: string | null | undefined) {
-  if (!userInput) return "My App";
-
-  const input = userInput.toLowerCase();
-
-  if (input.includes("education") || input.includes("kids")) return "Kids Learning App";
-  if (input.includes("fitness")) return "Fitness Tracker";
-  if (input.includes("ecommerce") || input.includes("shop")) return "E-commerce App";
-  if (input.includes("dashboard")) return "Analytics Dashboard";
-  if (input.includes("chat")) return "Chat Application";
-
-  try {
-    const aiResult = await openrouter.chat.send({
-      chatGenerationParams: {
-        model: "openai/gpt-4o-mini",
-        stream: false,
-        messages: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "text",
-                text: "Generate a short, catchy project name (2–4 words), title-cased, no punctuation."
-              }
-            ]
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Project description: "${userInput}"` }
-            ]
-          }
-        ]
-      }
-    });
-
-    const content = aiResult?.choices?.[0]?.message?.content;
-
-    let name = "";
-    if (typeof content === "string") name = content;
-    else if (Array.isArray(content))
-      name = content.map((c: any) => c.text || "").join(" ");
-
-    return name.trim().replace(/[^a-zA-Z0-9 ]/g, "") || "Untitled Project";
-  } catch (err) {
-    console.error("AI name failed:", err);
-    return userInput
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-}
-
-/* ================================
-   CREATE PROJECT
-================================ */
-export async function POST(req: NextRequest) {
-  try {
-    const { userInput, device, projectId } = await req.json();
-    const user = await currentUser();
-
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
-
-    const projectName = await generateProjectName(userInput);
-
-    const result = await db.insert(ProjectTable).values({
-      projectId,
-      userId: user.primaryEmailAddress?.emailAddress as string,
-      device,
-      userInput,
-      projectName,
-    }).returning();
-
-    return NextResponse.json(result[0]);
-  } catch (error) {
-    console.error("POST error:", error);
-    return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
-  }
-}
-
-/* ================================
-   GET PROJECT(S)
-================================ */
+/* ================= GET ================= */
 export async function GET(req: NextRequest) {
   try {
-    const projectId = req.nextUrl.searchParams.get("projectId");
     const user = await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    const userEmail = user.primaryEmailAddress?.emailAddress as string;
+    const projectId = req.nextUrl.searchParams.get("projectId");
 
-    // ✅ GET ALL PROJECTS
+    // ALL PROJECTS
     if (!projectId) {
       const projects = await db
         .select()
         .from(ProjectTable)
-        .where(eq(ProjectTable.userId, userEmail));
+        .where(eq(ProjectTable.userId, email));
 
       return NextResponse.json({ projects });
     }
 
-    // ✅ GET SINGLE PROJECT
-    const project = await db.select().from(ProjectTable)
-      .where(and(
-        eq(ProjectTable.projectId, projectId),
-        eq(ProjectTable.userId, userEmail)
-      ))
-      .limit(1);
+    // SINGLE PROJECT
+    const projectRows = await db
+      .select()
+      .from(ProjectTable)
+      .where(
+        and(
+          eq(ProjectTable.projectId, projectId),
+          eq(ProjectTable.userId, email)
+        )
+      );
 
-    if (!project.length) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    const projectDetail = projectRows[0];
+
+    if (!projectDetail) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 }
+      );
     }
 
-    let projectData = project[0];
-
-    if (!projectData.projectName) {
-      const generatedName = await generateProjectName(projectData.userInput);
-      const updated = await db.update(ProjectTable)
-        .set({ projectName: generatedName })
-        .where(eq(ProjectTable.projectId, projectId))
-        .returning();
-
-      projectData = updated[0];
-    }
-
-    const screens = await db.select().from(ScreenCongifTable)
-      .where(eq(ScreenCongifTable.projectId, projectId));
+    const screenConfig = await db
+      .select()
+      .from(ScreenConfigTable)
+      .where(eq(ScreenConfigTable.projectId, projectId));
 
     return NextResponse.json({
-      projectDetail: projectData,
-      screenConfig: screens,
+      projectDetail,
+      screenConfig,
     });
-
   } catch (error) {
     console.error("GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch project" }, { status: 500 });
+    return NextResponse.json({ error: "failed" }, { status: 500 });
   }
 }
 
-/* ================================
-   UPDATE PROJECT
-================================ */
-export async function PUT(req: NextRequest) {
+/* ================= SAFE JSON PARSER ================= */
+function extractJSON(text: string) {
   try {
-    const { projectName, theme, projectId } = await req.json();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
 
-    if (!projectId) {
-      return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+/* ================= POST ================= */
+export async function POST(req: NextRequest) {
+  try {
+    const { userInput, device = "website" } = await req.json();
+
+    const user = await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
+
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const result = await db.update(ProjectTable)
-      .set({ projectName, theme })
-      .where(eq(ProjectTable.projectId, projectId))
-      .returning();
+    if (!userInput) {
+      return NextResponse.json(
+        { error: "Missing userInput" },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json(result[0]);
+    const projectId = randomUUID();
+    let projectName = "Untitled Project";
+
+    /* ===== AI PROJECT NAME ===== */
+    try {
+      const aiRes = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini",
+            temperature: 0.3,
+            messages: [
+              {
+                role: "system",
+                content: `You generate ONLY valid JSON. Format: {"projectName":"..."}`,
+              },
+              {
+                role: "user",
+                content: `Generate a SaaS project name (max 5 words): ${userInput}`,
+              },
+            ],
+          }),
+        }
+      );
+
+      const data = await aiRes.json();
+      const raw = data?.choices?.[0]?.message?.content || "";
+      const parsed = extractJSON(raw);
+
+      if (parsed?.projectName) {
+        projectName = parsed.projectName.trim();
+      }
+    } catch {
+      console.log("AI project name fallback used");
+    }
+
+    /* ===== CREATE PROJECT ===== */
+    await db.insert(ProjectTable).values({
+      projectId,
+      projectName,
+      device,
+      userInput,
+      userId: email,
+      theme: "AURORA_INK",
+      projectVisualDescription: userInput,
+    });
+
+    /* ===== CREATE SCREENS ===== */
+    try {
+      const screenRes = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `
+You are a UX architect.
+
+Break the idea into 3–6 screens.
+
+Return ONLY JSON:
+{
+"screens": [
+{
+"screenId": "home",
+"screenName": "Home",
+"purpose": "Landing page",
+"screenDescription": "..."
+}
+]
+}
+                `,
+              },
+              {
+                role: "user",
+                content: userInput,
+              },
+            ],
+          }),
+        }
+      );
+
+      const screenData = await screenRes.json();
+      const rawScreens = screenData?.choices?.[0]?.message?.content || "";
+      const parsedScreens = extractJSON(rawScreens);
+
+      if (parsedScreens?.screens?.length) {
+        await db.insert(ScreenConfigTable).values(
+          parsedScreens.screens.map((s: any) => ({
+            projectId,
+            screenId: s.screenId,
+            screenName: s.screenName,
+            purpose: s.purpose,
+            screenDescription: s.screenDescription,
+            code: "",
+          }))
+        );
+      }
+    } catch {
+      console.log("Screen generation failed but project still created");
+    }
+
+    return NextResponse.json({ projectId });
+  } catch (error) {
+    console.error("POST error:", error);
+    return NextResponse.json({ error: "create failed" }, { status: 500 });
+  }
+}
+
+/* ================= PUT ================= */
+export async function PUT(req: NextRequest) {
+  try {
+    const { projectId, projectName } = await req.json();
+
+    const user = await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
+
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!projectId) {
+      return NextResponse.json(
+        { error: "Missing projectId" },
+        { status: 400 }
+      );
+    }
+
+    await db
+      .update(ProjectTable)
+      .set({
+        ...(typeof projectName === "string" && projectName.trim()
+          ? { projectName: projectName.trim() }
+          : {}),
+      })
+      .where(
+        and(
+          eq(ProjectTable.projectId, projectId),
+          eq(ProjectTable.userId, email)
+        )
+      );
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("PUT error:", error);
-    return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
+    return NextResponse.json({ error: "update failed" }, { status: 500 });
   }
 }

@@ -1,89 +1,107 @@
-"use server";
-
-import { openrouter } from "@/config/openrouter";
-import { ScreenCongifTable } from "@/config/schema"; // Fixed typo
-import { GENERATE_SCREEN_PROMPT } from "@/data/Prompt";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/config/db";
-import { and, eq } from "drizzle-orm";
+import { ScreenConfigTable } from "@/config/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    console.log("Incoming request body:", body);
+    const { projectId } = await req.json();
 
-    const { projectId, screenId, screenName, purpose, screenDescription, projectVisualDescription } = body;
-
-    if (!projectId || !screenId || !screenName || !purpose) {
-      console.warn("Missing required fields:", { projectId, screenId, screenName, purpose });
-      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
+    if (!projectId) {
+      return NextResponse.json(
+        { error: "Missing projectId" },
+        { status: 400 }
+      );
     }
 
-    const userInput = `
-Screen Name: ${screenName}
-Screen Purpose: ${purpose}
-Screen Description: ${screenDescription ?? ""}
-Project Visual Description: ${projectVisualDescription ?? ""}
-`;
+    const screens = await db
+      .select()
+      .from(ScreenConfigTable)
+      .where(eq(ScreenConfigTable.projectId, projectId));
 
-    // --- Call AI ---
-    let aiResult;
-    try {
-      aiResult = await openrouter.chat.send({
-        chatGenerationParams: {
-          model: "stepfun/step-3.5-flash:free",
-          stream: false,
-          messages: [
-            { role: "system", content: [{ type: "text", text: GENERATE_SCREEN_PROMPT }] },
-            { role: "user", content: [{ type: "text", text: userInput }] },
-          ],
-        },
-      });
-      console.log("AI Result received:", aiResult);
-    } catch (err) {
-      console.error("AI ERROR:", err);
-      return NextResponse.json({ success: false, error: "AI request failed" }, { status: 500 });
+    if (!screens.length) {
+      return NextResponse.json(
+        { error: "No screens found" },
+        { status: 404 }
+      );
     }
 
-    // --- Extract code safely ---
-    let codeRaw = aiResult?.choices?.[0]?.message?.content;
-    let code: string = "";
+    // ✅ PARALLEL GENERATION
+    const results = await Promise.all(
+      screens.map(async (screen) => {
+        try {
+          const response = await fetch(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: "stepfun/step-3.5-flash:free",
+                messages: [
+                  {
+                    role: "system",
+                    content: `
+Return ONLY valid full HTML.
+Must start with <html> and end with </html>.
+No markdown, no explanation.
+                    `,
+                  },
+                  {
+                    role: "user",
+                    content: `
+Screen Name: ${screen.screenName}
+Purpose: ${screen.purpose}
+Description: ${screen.screenDescription}
 
-    if (typeof codeRaw === "string") code = codeRaw;
-    else if (Array.isArray(codeRaw)) code = codeRaw.map((item: any) => item?.text || "").join("\n");
-    else code = "// AI returned empty content";
+Generate a modern Dribbble-level UI screen.
+                    `,
+                  },
+                ],
+              }),
+            }
+          );
 
-    // --- Upsert screen code in DB ---
-    try {
-      const existing = await db.select().from(ScreenCongifTable)
-        .where(and(eq(ScreenCongifTable.projectId, projectId), eq(ScreenCongifTable.screenId, screenId)));
+          if (!response.ok) {
+            throw new Error("OpenRouter API failed");
+          }
 
-      console.log("Existing DB record:", existing);
+          const data = await response.json();
 
-      if (existing.length === 0) {
-        await db.insert(ScreenCongifTable).values({
-          projectId,
-          screenId,
-          screenName,
-          purpose,
-          screenDescription: screenDescription ?? "",
-          code,
-        });
-        console.log("Inserted new screen record.");
-      } else {
-        await db.update(ScreenCongifTable)
-          .set({ code, screenName, purpose, screenDescription: screenDescription ?? "" })
-          .where(and(eq(ScreenCongifTable.projectId, projectId), eq(ScreenCongifTable.screenId, screenId)));
-        console.log("Updated existing screen record.");
-      }
-    } catch (dbErr) {
-      console.error("DB ERROR:", dbErr);
-      return NextResponse.json({ success: false, error: "Database operation failed" }, { status: 500 });
-    }
+          let html = data?.choices?.[0]?.message?.content || "";
+          html = html.replace(/```html|```/g, "").trim();
 
-    return NextResponse.json({ success: true, code });
+          const finalHTML =
+            html.match(/<html[\s\S]*<\/html>/i)?.[0] ||
+            `<html><body><h1>UI Failed</h1></body></html>`;
+
+          const updated = await db
+            .update(ScreenConfigTable)
+            .set({ code: finalHTML })
+            .where(eq(ScreenConfigTable.screenId, screen.screenId))
+            .returning();
+
+          return updated[0];
+        } catch (err) {
+          console.error("Screen generation failed:", err);
+
+          return {
+            ...screen,
+            code: `<html><body><h1>Generation Failed</h1></body></html>`,
+          };
+        }
+      })
+    );
+
+    return NextResponse.json({ screens: results });
   } catch (error) {
-    console.error("Unhandled error:", error);
-    return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });
+    console.error("SCREEN GENERATION ERROR:", error);
+
+    return NextResponse.json(
+      { error: "Screen generation failed" },
+      { status: 500 }
+    );
   }
 }
